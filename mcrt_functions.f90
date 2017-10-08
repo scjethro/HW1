@@ -18,6 +18,13 @@ module mcrt_functions
             tau = sample_exp()
             tau_out = tau/tau_max*r_max
         end function
+
+        real(dp) function mc_gen_first_L(tau_e, r_max) result(tau_out)
+            real(dp) :: tau, tau_e, r_max
+            
+            tau = mc_first_depth(tau_e)
+            tau_out = tau/tau_e*r_max
+        end function
         
         real(dp) function norm(vector)
             real(dp), intent(in) :: vector(:)
@@ -71,6 +78,23 @@ module mcrt_functions
             n(2) = sin(theta)*sin(phi)
             n(3) = cos(theta)
         end subroutine
+
+        real(dp) function mc_first_depth(tau_edge) result(tau)
+            real(dp) , intent(in) :: tau_edge
+            real(dp) :: rand
+            
+            call RANDOM_NUMBER(rand)
+            tau = -log(1-rand*(1-exp(-tau_edge)))
+        end function
+
+        real(dp) function edge_length(pos, nhat, r_max)
+        	real(dp), intent(in) :: pos(3), nhat(3), r_max
+        	real(dp) :: dot, r
+
+        	dot = dot_product(pos, nhat)
+        	r = norm(pos)
+        	edge_length = -dot + sqrt(dot**2 - (r**2 - r_max**2))
+        end function
         
         elemental subroutine mc_update(old_pos, n, length)
             real(dp), intent(out) :: old_pos
@@ -97,7 +121,6 @@ module mcrt_functions
             real(dp), intent(out) :: array
             array = 0
         end subroutine
-
 
         
 end module mcrt_functions

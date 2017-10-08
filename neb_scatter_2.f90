@@ -4,7 +4,7 @@ program monte_carlo
     
     real(dp), allocatable :: tau_list(:), total_scatter(:, :), mean_arr(:), length_travelled(:, :)
     ! real(dp) :: max_tau, min_tau
-    real(dp) :: pos(3), nhat(3)
+    real(dp) :: pos(3), nhat(3), old_pos(3)
     real(dp) :: leng, r_max = 200.0*AU, r, tau
     integer :: num_packets, len_tau, j, i, u
 
@@ -29,25 +29,43 @@ program monte_carlo
 
 
     do j = 1, size(tau_list)
-        tau = tau_list(j)
 
         do i = 1, num_packets
             r = 0.0_dp
             call zeros(pos)
             call zeros(nhat)
+            call zeros(old_pos)
             
-            length_travelled(j, i) = 0
+            length_travelled(j, i) = 0.0
 
-            do while ((r .le. r_max) .and. (r .ge. 0.0_dp))
-                call mc_emit(nhat)
+            do while ((r < r_max) .and. (r .ge. 0.0_dp))
                 
-                leng = mc_gen_L(tau,r_max)
+                tau = tau_list(j)
+                
+                old_pos = pos
+                
+                if (total_scatter(j,i) .eq. 0) then
+                    leng = mc_gen_first_L(tau,r_max)
+                else
+                    leng = mc_gen_L(tau,r_max)
+                end if
+
+                call mc_emit(nhat)
 
                 call mc_update(pos, nhat, leng)
-                total_scatter(j,i) = total_scatter(j,i) + 1
-                length_travelled(j, i) = length_travelled(j, i) + leng
-
+                
                 r = norm(pos)
+                
+                if (r < r_max) then
+                    total_scatter(j,i) = total_scatter(j,i) + 1
+                    length_travelled(j, i) = length_travelled(j, i) + leng
+                
+                else if (r .ge. r_max) then
+                    leng = edge_length(old_pos, nhat, r_max)
+                    length_travelled(j, i) = length_travelled(j, i) + leng
+
+                end if
+                
             end do
 
         end do
@@ -58,12 +76,12 @@ program monte_carlo
         mean_arr(i) = mean(total_scatter(i,:))
     end do
     
-    open(newunit = u, file = "Data/total_scatters.txt", status = "replace")
+    open(newunit = u, file = "Data_nb2/total_scatters.txt", status = "replace")
     do i = 1, size(tau_list)
         write(u,*) tau_list(i),',' , mean_arr(i)
     end do
 
-    open(newunit = u, file = "Data/length_travelled.txt", status = "replace")
+    open(newunit = u, file = "Data_nb2/length_travelled.txt", status = "replace")
     do j = 1, size(tau_list)
         do i = 1, num_packets
             write(u,*) tau_list(j) ,',' , length_travelled(j,i)/c
