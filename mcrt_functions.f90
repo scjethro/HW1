@@ -1,15 +1,15 @@
 module mcrt_functions
     use types
-	implicit none
+    implicit none
 
 
     contains
     
-		real(dp) function sample_exp()
-			real(dp) :: rand
+        real(dp) function sample_exp()
+            real(dp) :: rand
  
             call RANDOM_NUMBER(rand)
-			sample_exp = -log(rand)
+            sample_exp = -log(rand)
         end function
         
         real(dp) function mc_gen_L(tau_max, r_max) result(tau_out)
@@ -62,6 +62,40 @@ module mcrt_functions
             variance = total/(size(array)-1)
         end function
 
+        real(dp) function mc_first_depth(tau_edge) result(tau)
+            real(dp) , intent(in) :: tau_edge
+            real(dp) :: rand
+            
+            call RANDOM_NUMBER(rand)
+            tau = -log(1-rand*(1-exp(-tau_edge)))
+        end function
+
+        real(dp) function edge_length(pos, nhat, r_max)
+            real(dp), intent(in) :: pos(3), nhat(3), r_max
+            real(dp) :: dot, r
+
+            dot = dot_product(pos, nhat)
+            r = norm(pos)
+            edge_length = -dot + sqrt(dot**2 - (r**2 - r_max**2))
+        end function
+
+        subroutine image_calculate(position, theta, phi, x, y)
+            real(dp), intent(in) :: position(3), theta, phi
+            real(dp), intent(out) :: x, y
+
+            x = position(2)*cos(phi) - position(1)*sin(phi)
+            y = position(3)*sin(theta) - position(2)*cos(theta)*sin(phi) - position(1)*cos(theta)*cos(phi)
+
+        end subroutine
+
+        subroutine exit_angles(nhat, theta, phi)
+            real(dp), intent(in) :: nhat(3)
+            real(dp), intent(out) :: theta, phi
+
+            theta = atan(nhat(2)/nhat(1))
+            phi = atan(sqrt(nhat(1)**2 + nhat(2)**2)/nhat(1))
+        end subroutine
+
         subroutine mc_emit(n)
             real(dp), intent(inout) :: n(:)
             real(dp) :: random_num1, random_num2, theta, phi
@@ -77,24 +111,7 @@ module mcrt_functions
             n(1) = sin(theta)*cos(phi)
             n(2) = sin(theta)*sin(phi)
             n(3) = cos(theta)
-        end subroutine
-
-        real(dp) function mc_first_depth(tau_edge) result(tau)
-            real(dp) , intent(in) :: tau_edge
-            real(dp) :: rand
-            
-            call RANDOM_NUMBER(rand)
-            tau = -log(1-rand*(1-exp(-tau_edge)))
-        end function
-
-        real(dp) function edge_length(pos, nhat, r_max)
-        	real(dp), intent(in) :: pos(3), nhat(3), r_max
-        	real(dp) :: dot, r
-
-        	dot = dot_product(pos, nhat)
-        	r = norm(pos)
-        	edge_length = -dot + sqrt(dot**2 - (r**2 - r_max**2))
-        end function
+        end subroutine        
         
         elemental subroutine mc_update(old_pos, n, length)
             real(dp), intent(out) :: old_pos
@@ -122,5 +139,16 @@ module mcrt_functions
             array = 0
         end subroutine
 
+        subroutine image_bin(xim, yim, xbins, ybins, image_grid, pw_wt, r_max, tau)
+            real(dp), intent(in) :: xim, yim, pw_wt, r_max
+            integer :: xloc, yloc, tau, xbins, ybins
+            real(dp) :: image_grid(:,:,:)
+
+            xloc = int((xim/r_max)*xbins/2 + xbins/2 + 1)
+            yloc = int((yim/r_max)*xbins/2 + ybins/2 + 1)
+
+            image_grid(tau, xloc, yloc) = image_grid(tau, xloc, yloc) + pw_wt
+
+        end subroutine
         
 end module mcrt_functions

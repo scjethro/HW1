@@ -5,7 +5,7 @@ program monte_carlo
     real(dp), allocatable :: tau_list(:), total_scatter(:, :), mean_arr(:), length_travelled(:, :)
     ! real(dp) :: max_tau, min_tau
     real(dp) :: pos(3), nhat(3)
-    real(dp) :: leng, r_max = 200.0*AU, r, tau
+    real(dp) :: leng, r_max = 200.0*AU, r, tau, old_pos(3)
     integer :: num_packets, len_tau, j, i, u
 
     write(*,*) 'Enter number of num_packets'
@@ -35,19 +35,28 @@ program monte_carlo
             r = 0.0_dp
             call zeros(pos)
             call zeros(nhat)
+            call zeros(old_pos)
             
             length_travelled(j, i) = 0
 
             do while ((r .le. r_max) .and. (r .ge. 0.0_dp))
+                old_pos = pos
                 call mc_emit(nhat)
                 
                 leng = mc_gen_L(tau,r_max)
 
                 call mc_update(pos, nhat, leng)
-                total_scatter(j,i) = total_scatter(j,i) + 1
-                length_travelled(j, i) = length_travelled(j, i) + leng
 
                 r = norm(pos)
+
+                if (r < r_max) then
+                    total_scatter(j,i) = total_scatter(j,i) + 1
+                    length_travelled(j, i) = length_travelled(j, i) + leng
+                else if (r >= r_max) then
+                    leng = edge_length(old_pos, nhat, r_max)
+                    length_travelled(j, i) = length_travelled(j, i) + leng
+                end if 
+
             end do
 
         end do
@@ -58,12 +67,12 @@ program monte_carlo
         mean_arr(i) = mean(total_scatter(i,:))
     end do
     
-    open(newunit = u, file = "Data/total_scatters.txt", status = "replace")
+    open(newunit = u, file = "Data_nb1/total_scatters.txt", status = "replace")
     do i = 1, size(tau_list)
         write(u,*) tau_list(i),',' , mean_arr(i)
     end do
 
-    open(newunit = u, file = "Data/length_travelled.txt", status = "replace")
+    open(newunit = u, file = "Data_nb1/length_travelled.txt", status = "replace")
     do j = 1, size(tau_list)
         do i = 1, num_packets
             write(u,*) tau_list(j) ,',' , length_travelled(j,i)/c
