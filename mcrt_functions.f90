@@ -4,7 +4,7 @@ module mcrt_functions
 
 
     contains
-    
+      
         real(dp) function sample_exp()
             real(dp) :: rand
  
@@ -79,13 +79,45 @@ module mcrt_functions
             edge_length = -dot + sqrt(dot**2 - (r**2 - r_max**2))
         end function
 
+        real(dp) function gen_pw_wt(wt, pos, nhat, r_max, tau)
+            real(dp), intent(in) :: pos(:), nhat(:), r_max, tau, wt
+            real(dp) :: tau_peel
+
+            tau_peel = tau*edge_length(pos, nhat, r_max)/r_max
+            gen_pw_wt = 1.0/(4*pi)*exp(-tau_peel)*wt
+        end function
+
+        real(dp) function gen_flux_wt(wt, pos, nhat, r_max, tau)
+            real(dp), intent(in) :: pos(:), nhat(:), r_max, tau, wt
+            real(dp) :: pw_wt
+
+            pw_wt = gen_pw_wt(wt, pos, nhat, r_max, tau)
+            gen_flux_wt = 4*pi*pw_wt
+        end function
+
+        real(dp) function trapz_int(y_array, x_array) result(integral)
+            real(dp), intent(in) :: y_array(:), x_array(:)
+            integer :: N, i
+            
+            if ( size(y_array) == size(x_array) ) then
+                N = size(y_array)
+            else 
+                stop 'You have passed 2 arrays of different size, this is not allowed'
+            end if
+
+            integral = 0.0
+            
+            do i = 1, N-1
+                integral = integral + 0.5*(y_array(i+1) + y_array(i))*(x_array(i+1) - x_array(i))
+            end do
+        end function
+
         subroutine image_calculate(position, theta, phi, x, y)
             real(dp), intent(in) :: position(3), theta, phi
             real(dp), intent(out) :: x, y
 
             x = position(2)*cos(phi) - position(1)*sin(phi)
             y = position(3)*sin(theta) - position(2)*cos(theta)*sin(phi) - position(1)*cos(theta)*cos(phi)
-
         end subroutine
 
         subroutine exit_angles(nhat, theta, phi)
@@ -148,7 +180,6 @@ module mcrt_functions
             yloc = int((yim/r_max)*xbins/2 + ybins/2 + 1)
 
             image_grid(tau, xloc, yloc) = image_grid(tau, xloc, yloc) + pw_wt
-
         end subroutine
         
 end module mcrt_functions

@@ -2,39 +2,39 @@ program monte_carlo
     use types
     use mcrt_functions
     
-    real(dp), allocatable :: tau_list(:), total_scatter(:, :), mean_arr(:), length_travelled(:, :)
-    ! real(dp) :: max_tau, min_tau
+    real(dp), allocatable :: tau_list(:), total_scatter(:, :), mean_arr(:), length_travelled(:, :), images(:,:,:)
     real(dp) :: pos(3), nhat(3), old_pos(3)
-    real(dp) :: leng, r_max = 200.0*AU, r, tau, min_wt = 1e-3, albedo = 1.0_dp, ran, luminosity = 1.0, p = 0.1, wt, etheta = 0, ephi = 0
-    real(dp) :: xim, yim, pw_wt, step, tau_peel
-    real(dp), allocatable :: images(:,:,:)
+    real(dp) :: r_max = 200.0*AU, min_wt = 1e-3, albedo = 1.0_dp, luminosity = 1.0, p = 0.1, etheta = 0, ephi = 0 ! CORRECT THESE
+    real(dp) :: xim, yim, pw_wt, leng, r, tau, ran,  wt
     integer :: num_packets, len_tau, j, i, u, k, xbins = 500, ybins = 500
 
+    ! Parameters for the MC run
 
     ! write(*,*) 'Enter number of num_packets'
     ! read(*,*) num_packets
-    num_packets = 10000000
+    num_packets = 100000
+
+    ! leftover from configurable tau values
 
     ! write(*,*) 'Enter min_tau, max_tau, length of tau'
     ! read(*,*) min_tau, max_tau, len_tau
+    
+    ! configure the tau that we want to see
 
     len_tau = 4
-    
-    allocate(tau_list(len_tau))
-    allocate(total_scatter(len_tau, num_packets))
-    allocate(mean_arr(len_tau))
-    allocate(length_travelled(len_tau, num_packets))
-    allocate(images(len_tau,xbins, ybins))
-
-    step = r_max/xbins
-
-    ! write(*,*) 'You have selected: ', num_packets, ' packets, with ', min_tau, max_tau, len_tau, ' as the parameters for tau'
-    write(*,*) 'Program running!'
-
     ! call linspace(min_tau, max_tau, tau_list)
     ! tau_list = [0.1, 1.0, 5.0, 10.0, 20.0, 50.0, 100.0]
     tau_list = [0.1, 1.0, 5.0, 10.0]
+    
+    ! allocating the memory for things
+    ! allocate( tau_list( len_tau ) )
+    allocate( total_scatter( len_tau, num_packets ) )
+    allocate( mean_arr( len_tau ) )
+    allocate( length_travelled( len_tau, num_packets ) )
+    allocate( images( len_tau, xbins, ybins ) )
 
+    ! begin program
+    write(*,*) 'Program running!'
 
     do j = 1, size(tau_list)
 
@@ -62,21 +62,13 @@ program monte_carlo
                     leng = mc_gen_L(tau,r_max)
                 end if
 
-                tau_peel = tau*edge_length(pos, nhat, r_max)/r_max
-
                 ! NEE Image Binning MAKE INTO SUBROUNTINE
-                pw_wt = 1.0/(4*pi)*exp(-tau_peel)
+
+                pw_wt = gen_pw_wt(wt, pos, nhat, r_max, tau)
 
                 call image_calculate(pos, etheta, ephi, xim, yim)
 
                 call image_bin(xim, yim, xbins, ybins, images, pw_wt, r_max, j)
-                ! xim = xim/r_max
-                ! yim = yim/r_max
-
-                ! xloc = int(xim*xbins/2 + xbins/2)
-                ! yloc = int(yim*xbins/2 + ybins/2)
-
-                ! images(j, xloc, yloc) = images(j, xloc, yloc) + pw_wt
 
                 ! normal MC stuff
 
@@ -129,7 +121,7 @@ program monte_carlo
         mean_arr(i) = mean(total_scatter(i,:))
     end do
 
-    open(newunit = u, file = "Data_nb2/image_data.txt", status = "replace")
+    open(newunit = u, file = "Data_nb2/image_data_CHECKING.txt", status = "replace")
     do k = 1, len_tau
         do j = 1, xbins
             do i = 1, ybins
