@@ -1,158 +1,127 @@
 program monte_carlo
-    use types
-    use mcrt_functions
-    
-    real(dp), allocatable :: tau_list(:), total_scatter(:, :), mean_arr(:), length_travelled(:, :), image_grid(:,:,:), flux_grid(:,:,:)
-    real(dp) :: pos(3), nhat(3), old_pos(3)
-    real(dp) :: r_max = 200.0*AU, min_wt = 1e-3, albedo = 1.0_dp, luminosity = 0.1*lsolar, p = 0.1, etheta = 0, ephi = 0, distance = 140.0*pc ! CORRECT THESE
-    real(dp) :: xim, yim, pw_wt, leng, r, tau, ran,  wt, flux_wt, flux_multiplier, intensity_multiplier, area_pp
-    integer :: num_packets, len_tau, j, i, u, k, xbins = 500, ybins = 500
+      use types
+      use mcrt_functions
 
-    ! Parameters for the MC run
+      implicit none
+      ! allocate variables and declare things
+      real(dp), allocatable :: tau_list(:), total_scatter(:, :), mean_arr(:), angle_bins(:,:,:), position(:,:), ini_pos(:,:)
+      real(dp) :: pos(3), nhat(3), old_pos(3)
+      real(dp) :: r_max = 1.0, min_wt = 1e-3, albedo = 1.0_dp, p = 0.1
+      real(dp) :: leng, r, tau, ran,  wt, exit_theta, exit_phi
+      integer :: num_packets, len_tau, j, i, nbins = 200, u, phi_loc, theta_loc, k
 
-    ! write(*,*) 'Enter number of num_packets'
-    ! read(*,*) num_packets
-    num_packets = 1000000
+      ! Parameters for the MC run
+      num_packets = 1000000
 
-    flux_multiplier = luminosity/( num_packets * distance**2 )
+      ! configure the tau that we want to see
 
-    area_pp = r_max/xbins
-    intensity_multiplier = luminosity/( distance**2 * num_packets * ( area_pp**2/(distance**2) ))
+      tau_list = [0.1, 1.0, 5.0, 10.0, 20.0, 50.0]
+      len_tau = size(tau_list)
 
-    
-    ! configure the tau that we want to see
+      ! allocating the memory for things
+      allocate( total_scatter( len_tau, num_packets ) )
+      allocate( mean_arr( len_tau ) )
+      allocate( angle_bins( len_tau, nbins, nbins ) )
+      allocate( position( num_packets, 3 ) )
+      allocate( ini_pos( num_packets, 3 ) )
 
-    ! call linspace(min_tau, max_tau, tau_list)
-    ! tau_list = [0.1, 1.0, 5.0, 10.0, 20.0, 50.0, 100.0]
-    tau_list = [0.1, 1.0, 5.0, 10.0]
-    len_tau = size(tau_list)
-    
-    ! allocating the memory for things
-    allocate( total_scatter( len_tau, num_packets ) )
-    allocate( mean_arr( len_tau ) )
-    allocate( length_travelled( len_tau, num_packets ) )
-    allocate( image_grid( len_tau, xbins, ybins ) )
-    allocate( flux_grid( len_tau, xbins, ybins ) )
+      ! begin program
+      write(*,*) 'Program running!'
 
-    ! begin program
-    write(*,*) 'Program running!'
+      do j = 1, size(tau_list)
+      
+            do i = 1, num_packets
+                  wt = 1.0
+                  ! r = 0.0_dp
+                  tau = tau_list(j)
 
-    do j = 1, size(tau_list)
+                  call blob_emit_bias(nhat)
+                  call blob_initial_pos(pos, r_max) ! try to fix the separatrix issue and revert to old method?
 
-        do i = 1, num_packets
+                  leng = blob_initial_length(pos, nhat, r_max)
+                  call mc_update(pos, nhat, leng)
 
-            wt = 1.0 !luminosity/(num_packets)
-            r = 0.0_dp
-            tau = tau_list(j)
-            call zeros(pos)
-            call zeros(old_pos)
-            call mc_emit(nhat)
+                  ! force the particle to appear inside the sphere to trigger the MC simulation
+                  ! this was done because of rounding errors 
+                  r = 0.0_dp
+                  do while ((r < r_max) .and. (r >= 0.0_dp))
+                        ! provided we are within the sphere
+                        old_pos = pos 
+                        ! store the old position
 
-            length_travelled(j, i) = 0.0
+                        ! generate the length
+                        leng = mc_gen_L(tau, r_max)
 
-            do while ((r < r_max) .and. (r .ge. 0.0_dp))
-                ! provided we are within the sphere
-                old_pos = pos 
-                ! store the old position
+                        ! create an nhat vector
+                        if (r .ne. 0.0_dp) then ! convert into bool
+                              call mc_emit(nhat)
+                        end if
 
-                ! if it is the first scatter than you force it to scatter
-                if (total_scatter(j,i) .eq. 0) then
-                    leng = mc_gen_first_L(tau,r_max)
-                    wt = wt*(1-exp(-tau))
-                else
-                    leng = mc_gen_L(tau,r_max)
-                end if
+                        ! make it walk along the nhat vector a certain length leng
+                        call mc_update(pos, nhat, leng)
 
-                ! NEE Image Binning MAKE INTO SUBROUNTINE
+                        ! if (i == 1) then
+                        !       write(*,*) pos
+                        ! end if
+                      
+                        ! check if it will remain in the sphere
+                        r = norm(pos)
 
-                pw_wt = gen_pw_wt(wt, pos, nhat, r_max, tau)
-                flux_wt = gen_flux_wt(wt, pos, nhat, r_max, tau)
+                        if (r < r_max) then
+                              ! calculate if we want to scatter further based on the albedo
+                              ! implemented the russian roulette style giving packets an extra life before speaking to Kenny
+                              ! he says it's not needed in this HW but I've included it because my simulations were run with it
+                              if (ran .lt. albedo) then    
+                                    ! update the weight
+                                    wt = albedo * wt
+                                    ! let it scatter
+                                    total_scatter(j,i) = total_scatter(j,i) + 1
 
+                                    ! then do the killing of packets using the formula in the notes
+                                    if (wt <= min_wt) then
+                                    ! generate a random number
+                                          call RANDOM_NUMBER(ran)
+                                    ! either kill it or update the weight
+                                          if (ran .lt. p) then
+                                                wt = wt/p
+                                          else
+                                                continue
+                                          end if
+                                    end if
+                              ! if we don't want to scatter then just let it continue without doing anything
+                              else
+                                    ! we might want to consider the fact that its then scattered straight through
+                                    continue
+                              end if
 
-                call image_calculate(pos, etheta, ephi, xim, yim)
-                call image_bin(xim, yim, xbins, ybins, image_grid, pw_wt, r_max, j)
-                call image_bin(xim, yim, xbins, ybins, flux_grid, flux_wt, r_max, j)
+                        else if (r >= r_max) then
+                              ! if it's outside the sphere then use the geometry to allow us to calculate the "true" length that it's travelled
 
-                ! normal MC stuff
+                              leng = edge_length(old_pos, nhat, r_max)
 
-                ! create an nhat vector
-                call mc_emit(nhat)
-                ! make it walk along the nhat vector a certain length leng
-                call mc_update(pos, nhat, leng)
-                
-                ! check if it will remain in the sphere
-                r = norm(pos)
+                              ! now walk the particle to that location on the sphere, not to its final location
+                              call mc_update(old_pos, nhat, leng)
 
-                if (r < r_max) then
-                    ! update the length travelled if we remain in the sphere
-                    length_travelled(j, i) = length_travelled(j, i) + leng
-                    
-                    ! calculate if we want to scatter further based on the albedo
-                    if (ran .lt. albedo) then
-                        ! update the weight
-                        wt = albedo * wt
-                        ! let it scatter
-                        total_scatter(j,i) = total_scatter(j,i) + 1
+                              ! calculate the exit angles in the far field based on the direction that the particle is going along
+                              call exit_angles(nhat, exit_theta,  exit_phi)
 
-                        ! then do the killing of packets using the formula in the notes
-                        if (wt <= min_wt) then
-                            ! generate a random number
-                            call RANDOM_NUMBER(ran)
-                            
-                            ! either kill it or update the weight
-                            if (ran .lt. p) then
-                                wt = wt/p
-                            else
-                                continue
-                            end if
-                        end if  
-                    ! if we don't want to scatter then just let it continue without doing anything
-                    else
-                        continue
-                    end if
-                else if (r .ge. r_max) then
-                    ! if it's outside the sphere then use the geometry to allow us to calculate the "true" length that it's travelled
-                    leng = edge_length(old_pos, nhat, r_max)
-                    length_travelled(j, i) = length_travelled(j, i) + leng
-                end if
+                              ! generate a location in phi and theta as described in report
+                              phi_loc = int( exit_phi/(pi)*nbins/2 + nbins/2 )
+                              theta_loc = int( cos(exit_theta) * nbins/2 + nbins/2 +1)
+                              ! bin the in the array 
+                              angle_bins(j, phi_loc, theta_loc) = angle_bins(j, phi_loc, theta_loc) + 1
+                        end if
+                  end do
             end do
-        end do
-        write(*,*) j
-    end do
+            write(*,*) tau_list(j)
+      end do
 
-    open(newunit = u, file = "Data_nb2_b/image_data.txt", status = "replace")
-    do k = 1, len_tau
-        do j = 1, xbins
-            do i = 1, ybins
-                write(u,*) tau_list(k), ',', j, ',' ,i, ',', image_grid(k,j,i)
-            end do
-        end do    
-    end do
-
-    open(newunit = u, file = "Data_nb2_b/flux_data.txt", status = "replace")
-    do k = 1, len_tau
-        do j = 1, xbins
-            do i = 1, ybins
-                write(u,*) tau_list(k), ',', j, ',' ,i, ',', flux_grid(k,j,i)*flux_multiplier, ',', flux_grid(k, j, i)*intensity_multiplier
-            end do
-        end do    
-    end do
-    
-    ! do i = 1, size(tau_list)
-    !     mean_arr(i) = mean(total_scatter(i,:))
-    ! end do
-    
-    ! open(newunit = u, file = "Data_nb2/total_scatters.txt", status = "replace")
-    ! do i = 1, size(tau_list)
-    !     write(u,*) tau_list(i),',' , mean_arr(i)
-    ! end do
-
-    ! open(newunit = u, file = "Data_nb2/length_travelled.txt", status = "replace")
-    ! do j = 1, size(tau_list)
-    !     do i = 1, num_packets
-    !         write(u,*) tau_list(j) ,',' , length_travelled(j,i)/c
-    !     end do
-    ! end do    
-
+      open(newunit = u, file = "Q3/Data/angle_binning.txt", status = "replace")
+      do k = 1, len_tau
+              do j = 1, nbins
+                  do i = 1, nbins
+                        write(u,*) tau_list(k), ',', j,',',i , ',',angle_bins(k, j, i)
+                  end do
+            end do    
+      end do
 end program
-    

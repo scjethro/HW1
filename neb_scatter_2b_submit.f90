@@ -92,30 +92,8 @@ program monte_carlo
                 if (r < r_max) then
                     ! update the length travelled if we remain in the sphere
                     length_travelled(j, i) = length_travelled(j, i) + leng
-                    
-                    ! calculate if we want to scatter further based on the albedo
-                    if (ran .lt. albedo) then
-                        ! update the weight
-                        wt = albedo * wt
-                        ! let it scatter
-                        total_scatter(j,i) = total_scatter(j,i) + 1
 
-                        ! then do the killing of packets using the formula in the notes
-                        if (wt <= min_wt) then
-                            ! generate a random number
-                            call RANDOM_NUMBER(ran)
-                            
-                            ! either kill it or update the weight
-                            if (ran .lt. p) then
-                                wt = wt/p
-                            else
-                                continue
-                            end if
-                        end if  
-                    ! if we don't want to scatter then just let it continue without doing anything
-                    else
-                        continue
-                    end if
+                    ! could include the russian roulette here if Kenny wanted
                 else if (r .ge. r_max) then
                     ! if it's outside the sphere then use the geometry to allow us to calculate the "true" length that it's travelled
                     leng = edge_length(old_pos, nhat, r_max)
@@ -153,10 +131,5 @@ program monte_carlo
         end do    
     end do
     
-    
-    ! do i = 1, size(tau_list)
-    !     mean_arr(i) = mean(total_scatter(i,:))
-    ! end do  
-
 end program
     

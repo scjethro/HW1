@@ -121,7 +121,7 @@ program monte_carlo
         mean_arr(i) = mean(total_scatter(i,:))
     end do
 
-    open(newunit = u, file = "Data_nb2/image_data_CHECKING.txt", status = "replace")
+    open(newunit = u, file = "Q2/Data_nb2/image_data.txt", status = "replace")
     do k = 1, len_tau
         do j = 1, xbins
             do i = 1, ybins
