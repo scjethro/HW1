@@ -11,12 +11,13 @@ program monte_carlo_Q1
     integer :: num_packets, len_tau, j, i, u
 
     ! ask user for input of the number of packets they would like to run
-    write(*,*) 'Enter number of num_packets'
-    read(*,*) num_packets
+    ! write(*,*) 'Enter number of num_packets'
+    ! read(*,*) num_packets
+    num_packets = int(1e5)
 
     ! memory allocation of different variables now that number of packets is known
-    len_tau = 7
-    allocate(tau_list(7))
+    len_tau = 20
+    allocate(tau_list(len_tau))
     allocate(total_scatter(len_tau, num_packets))
     allocate(mean_arr(len_tau))
     allocate(length_travelled(len_tau, num_packets))
@@ -24,7 +25,8 @@ program monte_carlo_Q1
     write(*,*) 'Program running!'
 
     ! giving a fixed list of tau values to conform to the question
-    tau_list = [0.1, 1.0, 5.0, 10.0, 20.0, 50.0, 100.0]
+    ! tau_list = [0.1, 1.0, 5.0, 10.0, 20.0, 50.0, 100.0]
+    call linspace(0.1_dp, 50.0_dp, tau_list)
 
     ! begin to loop over the tau values
     do j = 1, size(tau_list)
